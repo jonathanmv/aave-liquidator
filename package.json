@@ -8,6 +8,7 @@
     "build": "npm run clean && babel src --out-dir lib --extensions '.ts,.tsx'",
     "start": "babel-node --extensions '.ts' src/app.ts",
     "start-prod": "NODE_ENV=production node ./lib/app.js > app.log 2>&1",
+    "watch": "babel-watch --extensions '.ts' src/app.ts",
     "test": "mocha --require @babel/register --require babel-polyfill './test'",
     "check-types": "tsc"
   },
@@ -35,6 +36,7 @@
     "@babel/preset-typescript": "^7.12.16",
     "@babel/register": "^7.12.13",
     "babel-polyfill": "^6.26.0",
+    "babel-watch": "^7.7.2",
     "chai": "^4.3.0",
     "mocha": "^7.2.0",
     "typescript": "^4.1.5"

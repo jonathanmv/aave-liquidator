@@ -13,23 +13,15 @@ const allowedLiquidation = .5 //50% of a borrowed asset can be liquidated
 const healthFactorMax = 1 //liquidation can happen when less than 1
 export var profit_threshold = .1 * (10**18) //in eth. A bonus below this will be ignored
 
-export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(user_id){
-  var count=0;
-  var maxCount=6
-  var user_id_query=""
+const preloadedBorrowers = require('./data/borrowers.json');
 
-  if(user_id){
-    user_id_query = `id: "${user_id}",`
-    maxCount = 1
-  }
-  console.log(`${Date().toLocaleString()} fetching unhealthy loans}`)
-  while(count < maxCount){
-  fetch(theGraphURL_v2, {
+const loadBorrowers = async ({ page , userId }: { page: number, userId?: string }) => {
+  const response = await fetch(theGraphURL_v2, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: `
       query GET_LOANS {
-        users(first:1000, skip:${1000*count}, orderBy: id, orderDirection: desc, where: {${user_id_query}borrowedReservesCount_gt: 0}) {
+        users(first:1000, skip:${ 1000 * page}, orderBy: id, orderDirection: desc, where: {${userId}borrowedReservesCount_gt: 0}) {
           id
           borrowedReservesCount
           collateralReserve:reserves(where: {currentATokenBalance_gt: 0}) {
@@ -66,19 +58,33 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(user_i
         }
       }`
     }),
-  })
-  .then(res => res.json())
-  .then(res => {
-    const total_loans = res.data.users.length
-    const unhealthyLoans=parseUsers(res.data);
-    if(unhealthyLoans.length>0) liquidationProfits(unhealthyLoans)
-    if(total_loans>0) console.log(`Records:${total_loans} Unhealthy:${unhealthyLoans.length}`)
   });
-  count++;
+  return await response.json();
+}
+
+export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(user_id: string | undefined) {
+  var count=0;
+  var maxCount=1
+  var user_id_query=""
+
+  if(user_id){
+    user_id_query = `id: "${user_id}",`
+    maxCount = 1
+  }
+  console.log(`${Date().toLocaleString()} fetching unhealthy loans from: ${theGraphURL_v2}`)
+  while(count < maxCount){
+    // const res = await loadBorrowers({ page: 0, userId: user_id_query });
+    const res = preloadedBorrowers;
+    const borrowers = res.data.users.length
+    console.log(`Fetched ${borrowers} borrowers`);
+    const unhealthyLoans = findUnhealthyLoans(res.data);
+    if(unhealthyLoans.length>0) liquidationProfits(unhealthyLoans)
+    if(borrowers>0) console.log(`Records:${borrowers} Unhealthy:${unhealthyLoans.length}`)
+    count++;
   }
 }
 
-function parseUsers(payload) {
+function findUnhealthyLoans(payload) {
   var loans=[];
   payload.users.forEach((user, i) => {
     var totalBorrowed=0;
@@ -114,22 +120,31 @@ function parseUsers(payload) {
     var healthFactor= totalCollateralThreshold / totalBorrowed;
 
     if (healthFactor<=healthFactorMax) {
-      loans.push( {
-          "user_id"  :  user.id,
-          "healthFactor"   :  healthFactor,
-          "max_collateralSymbol" : max_collateralSymbol,
-          "max_borrowedSymbol" : max_borrowedSymbol,
-          "max_borrowedPrincipal" : max_borrowedPrincipal,
-          "max_borrowedPriceInEth" : max_borrowedPriceInEth,
-          "max_collateralBonus" : max_collateralBonus/10000,
-          "max_collateralPriceInEth" : max_collateralPriceInEth
-        })
+      const unhealthyLoad = {
+        "user_id"  :  user.id,
+        "healthFactor"   :  healthFactor,
+        "max_collateralSymbol" : max_collateralSymbol,
+        "max_borrowedSymbol" : max_borrowedSymbol,
+        "max_borrowedPrincipal" : max_borrowedPrincipal,
+        "max_borrowedPriceInEth" : max_borrowedPriceInEth,
+        "max_collateralBonus" : max_collateralBonus/10000,
+        "max_collateralPriceInEth" : max_collateralPriceInEth
+      };
+      console.log(`Found unhealthy load`, unhealthyLoad);
+      loans.push(unhealthyLoad);
     }
   });
 
   //filter out loans under a threshold that we know will not be profitable (liquidation_threshold)
-  loans = loans.filter(loan => loan.max_borrowedPrincipal * allowedLiquidation * (loan.max_collateralBonus-1) * loan.max_borrowedPriceInEth / 10 ** TOKEN_LIST[loan.max_borrowedSymbol].decimals >= profit_threshold)
-  return loans;
+  const isLoadProfitable = loan => {
+    try {
+      return loan.max_borrowedPrincipal * allowedLiquidation * (loan.max_collateralBonus-1) * loan.max_borrowedPriceInEth / 10 ** TOKEN_LIST[loan.max_borrowedSymbol].decimals >= profit_threshold;
+    } catch (error) {
+      console.error(`Couldn't check if load is profitable`, loan, error);
+      return false;
+    }
+  }
+  return loans.filter(isLoadProfitable);
 }
 async function liquidationProfits(loans){
   loans.map(async (loan) => {

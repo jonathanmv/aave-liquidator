@@ -16,6 +16,8 @@ export var profit_threshold = .1 * (10**18) //in eth. A bonus below this will be
 const preloadedBorrowers = require('./data/borrowers.json');
 
 const loadBorrowers = async ({ page , userId }: { page: number, userId?: string }) => {
+  // https://api.thegraph.com/subgraphs/name/aave/protocol-v2/graphql?query=%0A++++%23%0A++++%23+Welcome+to+The+GraphiQL%0A++++%23%0A++++%23+GraphiQL+is+an+in-browser+tool+for+writing%2C+validating%2C+and%0A++++%23+testing+GraphQL+queries.%0A++++%23%0A++++%23+Type+queries+into+this+side+of+the+screen%2C+and+you+will+see+intelligent%0A++++%23+typeaheads+aware+of+the+current+GraphQL+type+schema+and+live+syntax+and%0A++++%23+validation+errors+highlighted+within+the+text.%0A++++%23%0A++++%23+GraphQL+queries+typically+start+with+a+%22%7B%22+character.+Lines+that+start%0A++++%23+with+a+%23+are+ignored.%0A++++%23%0A++++%23+An+example+GraphQL+query+might+look+like%3A%0A++++%23%0A++++%23+++++%7B%0A++++%23+++++++field%28arg%3A+%22value%22%29+%7B%0A++++%23+++++++++subField%0A++++%23+++++++%7D%0A++++%23+++++%7D%0A++++query+GET_LOANS+%7B%0A++++++++users%28first%3A1000%2C+orderBy%3A+id%2C+orderDirection%3A+desc%2C+where%3A+%7BborrowedReservesCount_gt%3A+0%7D%29+%7B%0A++++++++++id%0A++++++++++borrowedReservesCount%0A++++++++++collateralReserve%3Areserves%28where%3A+%7BcurrentATokenBalance_gt%3A+0%7D%29+%7B%0A++++++++++++currentATokenBalance%0A++++++++++++reserve%7B%0A++++++++++++++usageAsCollateralEnabled%0A++++++++++++++reserveLiquidationThreshold%0A++++++++++++++reserveLiquidationBonus%0A++++++++++++++borrowingEnabled%0A++++++++++++++utilizationRate%0A++++++++++++++symbol%0A++++++++++++++underlyingAsset%0A++++++++++++++price+%7B%0A++++++++++++++++priceInEth%0A++++++++++++++%7D%0A++++++++++++++decimals%0A++++++++++++%7D%0A++++++++++%7D%0A++++++++++borrowReserve%3A+reserves%28where%3A+%7BcurrentTotalDebt_gt%3A+0%7D%29+%7B%0A++++++++++++currentTotalDebt%0A++++++++++++reserve%7B%0A++++++++++++++usageAsCollateralEnabled%0A++++++++++++++reserveLiquidationThreshold%0A++++++++++++++borrowingEnabled%0A++++++++++++++utilizationRate%0A++++++++++++++symbol%0A++++++++++++++underlyingAsset%0A++++++++++++++price+%7B%0A++++++++++++++++priceInEth%0A++++++++++++++%7D%0A++++++++++++++decimals%0A++++++++++++%7D%0A++++++++++%7D%0A++++++++%7D%0A++++++%7D%0A++++%23%0A++++%23+Keyboard+shortcuts%3A%0A++++%23%0A++++%23++Prettify+Query%3A++Shift-Ctrl-P+%28or+press+the+prettify+button+above%29%0A++++%23%0A++++%23+++++Merge+Query%3A++Shift-Ctrl-M+%28or+press+the+merge+button+above%29%0A++++%23%0A++++%23+++++++Run+Query%3A++Ctrl-Enter+%28or+press+the+play+button+above%29%0A++++%23%0A++++%23+++Auto+Complete%3A++Ctrl-Space+%28or+just+start+typing%29%0A++++%23%0A++
+  return preloadedBorrowers;
   const response = await fetch(theGraphURL_v2, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -73,18 +75,18 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(user_i
   }
   console.log(`${Date().toLocaleString()} fetching unhealthy loans from: ${theGraphURL_v2}`)
   while(count < maxCount){
-    // const res = await loadBorrowers({ page: 0, userId: user_id_query });
-    const res = preloadedBorrowers;
-    const borrowers = res.data.users.length
-    console.log(`Fetched ${borrowers} borrowers`);
+    const res = await loadBorrowers({ page: 0, userId: user_id_query });
+    const borrowersLoaded = res.data.users.length
+    console.log(`Fetched ${borrowersLoaded} borrowers`);
     const unhealthyLoans = findUnhealthyLoans(res.data);
     if(unhealthyLoans.length>0) liquidationProfits(unhealthyLoans)
-    if(borrowers>0) console.log(`Records:${borrowers} Unhealthy:${unhealthyLoans.length}`)
+    if(borrowersLoaded>0) console.log(`Records:${borrowersLoaded} Unhealthy:${unhealthyLoans.length}`)
     count++;
   }
 }
 
 function findUnhealthyLoans(payload) {
+  console.log(`Finding unhealthy loans`);
   var loans=[];
   payload.users.forEach((user, i) => {
     var totalBorrowed=0;
@@ -97,21 +99,22 @@ function findUnhealthyLoans(payload) {
     var max_collateralBonus=0;
     var max_collateralPriceInEth = 0;
 
-    user.borrowReserve.forEach((borrowReserve, i) => {
-      var priceInEth= borrowReserve.reserve.price.priceInEth
+    user.borrowReserve.forEach(borrowReserve => {
+      var priceInEth = borrowReserve.reserve.price.priceInEth
       var principalBorrowed = borrowReserve.currentTotalDebt
       totalBorrowed += priceInEth * principalBorrowed / (10**borrowReserve.reserve.decimals)
-      if (principalBorrowed> max_borrowedPrincipal)
+      if (principalBorrowed > max_borrowedPrincipal) {
         max_borrowedSymbol = borrowReserve.reserve.symbol
         max_borrowedPrincipal = principalBorrowed
         max_borrowedPriceInEth = priceInEth
+      }
     });
-    user.collateralReserve.forEach((collateralReserve, i) => {
-      var priceInEth= collateralReserve.reserve.price.priceInEth
+    user.collateralReserve.forEach(collateralReserve => {
+      var priceInEth = collateralReserve.reserve.price.priceInEth
       var principalATokenBalance = collateralReserve.currentATokenBalance
       totalCollateral += priceInEth * principalATokenBalance / (10**collateralReserve.reserve.decimals)
       totalCollateralThreshold += priceInEth * principalATokenBalance * (collateralReserve.reserve.reserveLiquidationThreshold/10000)/ (10**collateralReserve.reserve.decimals)
-      if (collateralReserve.reserve.reserveLiquidationBonus > max_collateralBonus){
+      if (collateralReserve.reserve.reserveLiquidationBonus > max_collateralBonus) {
         max_collateralSymbol = collateralReserve.reserve.symbol
         max_collateralBonus=collateralReserve.reserve.reserveLiquidationBonus
         max_collateralPriceInEth = priceInEth
@@ -138,9 +141,12 @@ function findUnhealthyLoans(payload) {
   //filter out loans under a threshold that we know will not be profitable (liquidation_threshold)
   const isLoadProfitable = loan => {
     try {
+      if (!(loan.max_borrowedSymbol in TOKEN_LIST)) {
+        throw new Error(`${loan.max_borrowedSymbol} is not supported in the TOKEN_LIST: ${Object.keys(TOKEN_LIST).join()}`);
+      } 
       return loan.max_borrowedPrincipal * allowedLiquidation * (loan.max_collateralBonus-1) * loan.max_borrowedPriceInEth / 10 ** TOKEN_LIST[loan.max_borrowedSymbol].decimals >= profit_threshold;
-    } catch (error) {
-      console.error(`Couldn't check if load is profitable`, loan, error);
+    } catch (error: any) {
+      console.error(`Couldn't check if load is profitable`, loan, error.message);
       return false;
     }
   }

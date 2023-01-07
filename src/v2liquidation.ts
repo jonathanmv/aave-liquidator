@@ -79,14 +79,16 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(user_i
     const borrowersLoaded = res.data.users.length
     console.log(`Fetched ${borrowersLoaded} borrowers`);
     const unhealthyLoans = findUnhealthyLoans(res.data);
-    if(unhealthyLoans.length>0) liquidationProfits(unhealthyLoans)
-    if(borrowersLoaded>0) console.log(`Records:${borrowersLoaded} Unhealthy:${unhealthyLoans.length}`)
+    console.log(`Found ${unhealthyLoans.length} unhealthy loans out of ${borrowersLoaded}`);
+    const profitableLoans = unhealthyLoans.filter(isLoadProfitable);
+    console.log(`Found ${profitableLoans.length} profitable loans`);
+    liquidationProfits(profitableLoans);
     count++;
   }
 }
 
 function findUnhealthyLoans(payload) {
-  console.log(`Finding unhealthy loans`);
+  console.log(`Finding unhealthy loans...`);
   var loans=[];
   payload.users.forEach((user, i) => {
     var totalBorrowed=0;
@@ -138,24 +140,27 @@ function findUnhealthyLoans(payload) {
     }
   });
 
-  //filter out loans under a threshold that we know will not be profitable (liquidation_threshold)
-  const isLoadProfitable = loan => {
-    try {
-      if (!(loan.max_borrowedSymbol in TOKEN_LIST)) {
-        throw new Error(`${loan.max_borrowedSymbol} is not supported in the TOKEN_LIST: ${Object.keys(TOKEN_LIST).join()}`);
-      } 
-      return loan.max_borrowedPrincipal * allowedLiquidation * (loan.max_collateralBonus-1) * loan.max_borrowedPriceInEth / 10 ** TOKEN_LIST[loan.max_borrowedSymbol].decimals >= profit_threshold;
-    } catch (error: any) {
-      console.error(`Couldn't check if load is profitable`, loan, error.message);
-      return false;
-    }
-  }
-  return loans.filter(isLoadProfitable);
+  return loans;
 }
+
+const isLoadProfitable = loan => {
+  try {
+    if (!(loan.max_borrowedSymbol in TOKEN_LIST)) {
+      throw new Error(`${loan.max_borrowedSymbol} is not supported in the TOKEN_LIST: ${Object.keys(TOKEN_LIST).join()}`);
+    } 
+    return loan.max_borrowedPrincipal * allowedLiquidation * (loan.max_collateralBonus-1) * loan.max_borrowedPriceInEth / 10 ** TOKEN_LIST[loan.max_borrowedSymbol].decimals >= profit_threshold;
+  } catch (error: any) {
+    console.error(`Couldn't check if load is profitable`, loan, error.message);
+    return false;
+  }
+}
+
 async function liquidationProfits(loans){
+  console.log(`Liquidating ${loans.length} loans...`);
   loans.map(async (loan) => {
-     liquidationProfit(loan)
-     })
+    liquidationProfit(loan)
+  })
+  console.log(`${loans.length} liquidated.`);
 }
 
 async function liquidationProfit(loan){

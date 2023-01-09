@@ -13,7 +13,7 @@ const allowedLiquidation = .5 //50% of a borrowed asset can be liquidated
 const healthFactorMax = 1 //liquidation can happen when less than 1
 export var profit_threshold = .1 * (10**18) //in eth. A bonus below this will be ignored
 
-const preloadedBorrowers = require('./data/borrowers.json');
+import preloadedBorrowers from './data/borrowers.json';
 
 const loadBorrowers = async ({ page , userId }: { page: number, userId?: string }) => {
   // https://api.thegraph.com/subgraphs/name/aave/protocol-v2/graphql?query=%0A++++%23%0A++++%23+Welcome+to+The+GraphiQL%0A++++%23%0A++++%23+GraphiQL+is+an+in-browser+tool+for+writing%2C+validating%2C+and%0A++++%23+testing+GraphQL+queries.%0A++++%23%0A++++%23+Type+queries+into+this+side+of+the+screen%2C+and+you+will+see+intelligent%0A++++%23+typeaheads+aware+of+the+current+GraphQL+type+schema+and+live+syntax+and%0A++++%23+validation+errors+highlighted+within+the+text.%0A++++%23%0A++++%23+GraphQL+queries+typically+start+with+a+%22%7B%22+character.+Lines+that+start%0A++++%23+with+a+%23+are+ignored.%0A++++%23%0A++++%23+An+example+GraphQL+query+might+look+like%3A%0A++++%23%0A++++%23+++++%7B%0A++++%23+++++++field%28arg%3A+%22value%22%29+%7B%0A++++%23+++++++++subField%0A++++%23+++++++%7D%0A++++%23+++++%7D%0A++++query+GET_LOANS+%7B%0A++++++++users%28first%3A1000%2C+orderBy%3A+id%2C+orderDirection%3A+desc%2C+where%3A+%7BborrowedReservesCount_gt%3A+0%7D%29+%7B%0A++++++++++id%0A++++++++++borrowedReservesCount%0A++++++++++collateralReserve%3Areserves%28where%3A+%7BcurrentATokenBalance_gt%3A+0%7D%29+%7B%0A++++++++++++currentATokenBalance%0A++++++++++++reserve%7B%0A++++++++++++++usageAsCollateralEnabled%0A++++++++++++++reserveLiquidationThreshold%0A++++++++++++++reserveLiquidationBonus%0A++++++++++++++borrowingEnabled%0A++++++++++++++utilizationRate%0A++++++++++++++symbol%0A++++++++++++++underlyingAsset%0A++++++++++++++price+%7B%0A++++++++++++++++priceInEth%0A++++++++++++++%7D%0A++++++++++++++decimals%0A++++++++++++%7D%0A++++++++++%7D%0A++++++++++borrowReserve%3A+reserves%28where%3A+%7BcurrentTotalDebt_gt%3A+0%7D%29+%7B%0A++++++++++++currentTotalDebt%0A++++++++++++reserve%7B%0A++++++++++++++usageAsCollateralEnabled%0A++++++++++++++reserveLiquidationThreshold%0A++++++++++++++borrowingEnabled%0A++++++++++++++utilizationRate%0A++++++++++++++symbol%0A++++++++++++++underlyingAsset%0A++++++++++++++price+%7B%0A++++++++++++++++priceInEth%0A++++++++++++++%7D%0A++++++++++++++decimals%0A++++++++++++%7D%0A++++++++++%7D%0A++++++++%7D%0A++++++%7D%0A++++%23%0A++++%23+Keyboard+shortcuts%3A%0A++++%23%0A++++%23++Prettify+Query%3A++Shift-Ctrl-P+%28or+press+the+prettify+button+above%29%0A++++%23%0A++++%23+++++Merge+Query%3A++Shift-Ctrl-M+%28or+press+the+merge+button+above%29%0A++++%23%0A++++%23+++++++Run+Query%3A++Ctrl-Enter+%28or+press+the+play+button+above%29%0A++++%23%0A++++%23+++Auto+Complete%3A++Ctrl-Space+%28or+just+start+typing%29%0A++++%23%0A++
@@ -82,6 +82,7 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(user_i
     console.log(`Found ${unhealthyLoans.length} unhealthy loans out of ${borrowersLoaded}`);
     const profitableLoans = unhealthyLoans.filter(isLoadProfitable);
     console.log(`Found ${profitableLoans.length} profitable loans`);
+    console.log(profitableLoans);
     liquidationProfits(profitableLoans);
     count++;
   }
@@ -135,7 +136,7 @@ function findUnhealthyLoans(payload) {
         "max_collateralBonus" : max_collateralBonus/10000,
         "max_collateralPriceInEth" : max_collateralPriceInEth
       };
-      console.log(`Found unhealthy load`, unhealthyLoad);
+      console.log(`Found unhealthy loan`, unhealthyLoad);
       loans.push(unhealthyLoad);
     }
   });

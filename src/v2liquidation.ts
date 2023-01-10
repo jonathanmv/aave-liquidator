@@ -11,7 +11,7 @@ const theGraphURL_v2_mainnet = 'https://api.thegraph.com/subgraphs/name/aave/pro
 const theGraphURL_v2 = APP_CHAIN_ID == ChainId.MAINNET ? theGraphURL_v2_mainnet : theGraphURL_v2_kovan
 const allowedLiquidation = .5 //50% of a borrowed asset can be liquidated
 const healthFactorMax = 1 //liquidation can happen when less than 1
-export var profit_threshold = .1 * (10**18) //in eth. A bonus below this will be ignored
+export var profit_threshold = .01 * (10**18) //in eth. A bonus below this will be ignored
 
 import preloadedBorrowers from './data/borrowers.json';
 
@@ -64,7 +64,7 @@ const loadBorrowers = async ({ page , userId }: { page: number, userId?: string 
   return await response.json();
 }
 
-export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(user_id: string | undefined) {
+export const fetchV2UnhealthyLoans = async (user_id: string | undefined) => {
   var count=0;
   var maxCount=1
   var user_id_query=""
@@ -80,12 +80,16 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(user_i
     console.log(`Fetched ${borrowersLoaded} borrowers`);
     const unhealthyLoans = findUnhealthyLoans(res.data);
     console.log(`Found ${unhealthyLoans.length} unhealthy loans out of ${borrowersLoaded}`);
-    const profitableLoans = unhealthyLoans.filter(isLoadProfitable);
-    console.log(`Found ${profitableLoans.length} profitable loans`);
+    const processableLoans = unhealthyLoans.filter(isLoanProcessable);
+    console.log(`Found ${processableLoans.length} processable loans out of ${unhealthyLoans.length} unhealthy loans`);
+    const profitableLoans = processableLoans.filter(isLoanProfitable);
+    console.log(`Found ${profitableLoans.length} profitable loans out of ${processableLoans.length} processable loans`);
     console.log(profitableLoans);
-    liquidationProfits(profitableLoans);
+    await liquidationProfits(profitableLoans);
+    console.log(`${count + 1} page of loans processed`);
     count++;
   }
+  console.log(`All ${count} loan pages processed`);
 }
 
 function findUnhealthyLoans(payload) {
@@ -136,7 +140,7 @@ function findUnhealthyLoans(payload) {
         "max_collateralBonus" : max_collateralBonus/10000,
         "max_collateralPriceInEth" : max_collateralPriceInEth
       };
-      console.log(`Found unhealthy loan`, unhealthyLoad);
+      // console.log(`Found unhealthy loan`, unhealthyLoad);
       loans.push(unhealthyLoad);
     }
   });
@@ -144,11 +148,25 @@ function findUnhealthyLoans(payload) {
   return loans;
 }
 
-const isLoadProfitable = loan => {
+const guardToken = (token: string) => {
+  if (!(token in TOKEN_LIST)) {
+    throw new Error(`${token} is not supported in the TOKEN_LIST: ${Object.keys(TOKEN_LIST).join()}`);
+  } 
+}
+
+const isLoanProcessable = loan => {
   try {
-    if (!(loan.max_borrowedSymbol in TOKEN_LIST)) {
-      throw new Error(`${loan.max_borrowedSymbol} is not supported in the TOKEN_LIST: ${Object.keys(TOKEN_LIST).join()}`);
-    } 
+    // are loan tokens supported
+    guardToken(loan.max_borrowedSymbol)
+    guardToken(loan.max_collateralSymbol)
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+const isLoanProfitable = loan => {
+  try {
     return loan.max_borrowedPrincipal * allowedLiquidation * (loan.max_collateralBonus-1) * loan.max_borrowedPriceInEth / 10 ** TOKEN_LIST[loan.max_borrowedSymbol].decimals >= profit_threshold;
   } catch (error: any) {
     console.error(`Couldn't check if load is profitable`, loan, error.message);
@@ -157,15 +175,27 @@ const isLoadProfitable = loan => {
 }
 
 async function liquidationProfits(loans){
-  console.log(`Liquidating ${loans.length} loans...`);
-  loans.map(async (loan) => {
-    liquidationProfit(loan)
-  })
-  console.log(`${loans.length} liquidated.`);
+  console.log(`Liquidating ${loans.length} loans synchronously...`);
+  const successfullyLiquidated = [];
+  for await (const loan of loans) {
+    try {
+      await liquidationProfit(loan);
+      console.log(`Loan liquidated`);
+      successfullyLiquidated.push(loan);
+    } catch (error) {
+      console.log(`Failed to liquidate loan`, loan, error);
+    }    
+  }
+  
+  console.log(`${successfullyLiquidated} successfully liquidated.`);
+  return successfullyLiquidated;
 }
 
-async function liquidationProfit(loan){
+async function liquidationProfit(loan) {
+  console.log(`Liquidating loan...`, loan);
+
   //flash loan fee
+  console.log(`Calculating flash loan amount...`);
   const flashLoanAmount = percentBigInt(BigInt(loan.max_borrowedPrincipal), allowedLiquidation)
   const flashLoanCost = percentBigInt(flashLoanAmount, FLASH_LOAN_FEE)
 
@@ -174,11 +204,14 @@ async function liquidationProfit(loan){
   var flashLoanAmountInEth_plusBonus = percentBigInt(flashLoanAmountInEth,loan.max_collateralBonus) //add the bonus
   var collateralTokensFromPayout  = flashLoanAmountInEth_plusBonus * BigInt(10 ** TOKEN_LIST[loan.max_collateralSymbol].decimals) / BigInt(loan.max_collateralPriceInEth) //this is the amount of tokens that will be received as payment for liquidation and then will need to be swapped back to token of the flashloan
   var fromTokenAmount = new TokenAmount(TOKEN_LIST[loan.max_collateralSymbol], collateralTokensFromPayout)// this is the number of coins to trade (should have many 0's)
+  console.log(`Finding best trade...`)
   var bestTrade = await useTradeExactIn(fromTokenAmount,TOKEN_LIST[loan.max_borrowedSymbol])
+  console.log(`Got best trade.`);
 
   var minimumTokensAfterSwap = bestTrade ? (BigInt(bestTrade.outputAmount.numerator) * BigInt(10 ** TOKEN_LIST[loan.max_borrowedSymbol].decimals)) / BigInt(bestTrade.outputAmount.denominator) : BigInt(0)
 
   //total profits (bonus_after_swap - flashLoanCost).to_eth - gasFee
+  console.log(`Calculating profit in ETH after gas...`)
   var gasFee = gasCostToLiquidate() //calc gas fee
   var flashLoanPlusCost = (flashLoanCost + flashLoanAmount)
   var profitInBorrowCurrency = minimumTokensAfterSwap - flashLoanPlusCost
@@ -199,13 +232,16 @@ async function liquidationProfit(loan){
     console.log(`flashLoanPlusCost ${flashLoanPlusCost}`)
     console.log(`gasFee ${gasFee}`)
     console.log(`profitInEthAfterGas ${Number(profitInEthAfterGas)/(10 ** 18)}eth`)
+    return true;
+  } else {
+    console.log(`Loan is not profitable enough in ETH after gas`, {
+      profitInEthAfterGas,
+      profit_threshold
+    })
+    return false;
   }
     //console.log(`user_ID:${loan.user_id} HealthFactor ${loan.healthFactor.toFixed(2)} allowedLiquidation ${flashLoanAmount.toFixed(2)} ${loan.max_collateralSymbol}->${loan.max_borrowedSymbol}` )
     //console.log(`minimumTokensAfterSwap ${minimumTokensAfterSwap} flashLoanCost ${flashLoanCost} gasFee ${gasFee} profit ${profit.toFixed(2)}`)
-
-
-
-
 }
 //returned value is in eth
 function gasCostToLiquidate(){

@@ -31,18 +31,32 @@ async function delayedFetchUnhealthyLoans(){
   //var fromTokenAmount = new TokenAmount(TOKEN_LIST["WBTC"], 1000)// this is the number of coins to trade (should have many 0's)
   //console.log (JSON.stringify(useTradeExactIn(fromTokenAmount,TOKEN_LIST["ZRX"]), null, 2))
   //fetchV2UnhealthyLoans("0xfe206f90c58feb8e42474c5074de43c22da8bc35");
-  while(1==1){
-    console.log(`gas cost ${gas_cost}`)
-    console.log("fetching loans")
+  const sleepInMins = 1;
+  while(true){
+console.log(`
+//////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////
+/////////////////       FETCHING LOANS      //////////////////
+//////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////
+`)
 
-    fetchV2UnhealthyLoans();
-    getGas();
-    await sleep(60000);
+    await getGas();
+    console.log(`gas cost ${gas_cost}`)
+    
+    console.log("fetching loans...")
+    await fetchV2UnhealthyLoans(undefined);
+
+    await sleep(sleepInMins * 60000);
   }
   //TODO calculate liquidation threshold daily
 
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+function sleep(ms: number) {
+  console.log(`Sleeping ${ms / 1000} secs...`)
+  return new Promise<void>(resolve => setTimeout(() => {
+    console.log(`Waking up after sleeping ${ms / 1000} secs.`)
+    resolve();
+  }, ms));
 }

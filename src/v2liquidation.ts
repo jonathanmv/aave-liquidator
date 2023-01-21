@@ -187,7 +187,7 @@ async function liquidationProfits(loans){
     }    
   }
   
-  console.log(`${successfullyLiquidated} successfully liquidated.`);
+  console.log(`${successfullyLiquidated.length} successfully liquidated (out of ${loans.length}).`);
   return successfullyLiquidated;
 }
 

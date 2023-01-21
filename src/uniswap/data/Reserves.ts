@@ -18,10 +18,8 @@ export async function usePairs(currencies: [Currency | undefined, Currency | und
       ])
 //convert to pairs and get their reserves
   const reserves = await getReserves(tokens)
-  //filter out nulls
-  const reserves_cleansed = reserves.filter(result => !!result )
-  //console.log(`results ${JSON.stringify(reserves,null,2)}`)
-  return reserves_cleansed
+  // console.log(`results ${JSON.stringify(reserves,null,2)}`)
+  return reserves
 }
 
 export async function usePair(tokenA?: Currency, tokenB?: Currency): Pair[] {
@@ -30,18 +28,17 @@ export async function usePair(tokenA?: Currency, tokenB?: Currency): Pair[] {
 
 async function getReserves(tokens:[Token,Token][]): Pair[] {
   const results = await Promise.all(tokens.map(async([tokenA, tokenB]) => {
-    if (tokenA && tokenB && tokenA.equals(tokenB)){
-      return
-    }
-    //console.log (`tokenA ${tokenA.symbol} tokenB ${tokenB.symbol}`)
-    try {
-      const pairDetails = await Fetcher.fetchPairData(tokenA, tokenB)
-      return pairDetails
-    }
-    catch(e){
+      if (tokenA && tokenB && tokenA.equals(tokenB)){
+        return
+      }
+      //console.log (`tokenA ${tokenA.symbol} tokenB ${tokenB.symbol}`)
+      try {
+        return await Fetcher.fetchPairData(tokenA, tokenB)
+      } catch(e){
+        // console.log(`Error Fetching Pair Data`, tokenA, tokenB)
+        // console.log(e);
       }
     }
-  )
-)
-  return results
+  ))
+  return results.filter(pair => !!pair);
 }

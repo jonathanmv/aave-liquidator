@@ -8,6 +8,45 @@ import { liquidate } from './liquidation/liquidation';
 import { getGas,gas_cost } from './utils/gas'
 import { fetchV2UnhealthyLoans } from './v2liquidation';
 require('isomorphic-fetch');
+import { quoteGas }  from "./package/quoteGas";
+
+//infinite loop calling fetchUnhealthyLoans
+//sleep for 1 minute before each call
+async function run(){
+  //var fromTokenAmount = new TokenAmount(TOKEN_LIST["WBTC"], 1000)// this is the number of coins to trade (should have many 0's)
+  //console.log (JSON.stringify(useTradeExactIn(fromTokenAmount,TOKEN_LIST["ZRX"]), null, 2))
+  //fetchV2UnhealthyLoans("0xfe206f90c58feb8e42474c5074de43c22da8bc35");
+  const sleepInMins = 1/6;
+  while(true){
+console.log(`
+//////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////
+/////////////////       FETCHING LOANS      //////////////////
+//////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////
+`)
+
+    console.log(`Getting gas ...`)
+    const quote = await quoteGas();
+    console.log(`gas cost`, quote);
+    
+    console.log("fetching loans...")
+    // await fetchV2UnhealthyLoans(undefined);
+
+    await sleep(sleepInMins * 60000);
+  }
+  //TODO calculate liquidation threshold daily
+
+}
+
+function sleep(ms: number) {
+  console.log(`Sleeping ${ms / 1000} secs...`)
+  return new Promise<void>(resolve => setTimeout(() => {
+    console.log(`Waking up after sleeping ${ms / 1000} secs.`)
+    resolve();
+  }, ms));
+}
+
 
 /*
 This is a place holder for implementing the liquidation call which would fully automate this bot
@@ -23,40 +62,17 @@ liquidate(
   swapPath, //the path that uniswap will use to swap tokens back to original tokens
 )
 */
-delayedFetchUnhealthyLoans();
 
-//infinite loop calling fetchUnhealthyLoans
-//sleep for 1 minute before each call
-async function delayedFetchUnhealthyLoans(){
-  //var fromTokenAmount = new TokenAmount(TOKEN_LIST["WBTC"], 1000)// this is the number of coins to trade (should have many 0's)
-  //console.log (JSON.stringify(useTradeExactIn(fromTokenAmount,TOKEN_LIST["ZRX"]), null, 2))
-  //fetchV2UnhealthyLoans("0xfe206f90c58feb8e42474c5074de43c22da8bc35");
-  const sleepInMins = 1;
-  while(true){
-console.log(`
+try {
+  run();
+} catch (e: any) {
+  console.error(`Error running ${e.message}`)
+  console.error(`
 //////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////
-/////////////////       FETCHING LOANS      //////////////////
+/////////////////////////       ERROR     ////////////////////
 //////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////
-`)
-
-    await getGas();
-    console.log(`gas cost ${gas_cost}`)
-    
-    console.log("fetching loans...")
-    await fetchV2UnhealthyLoans(undefined);
-
-    await sleep(sleepInMins * 60000);
-  }
-  //TODO calculate liquidation threshold daily
-
-}
-
-function sleep(ms: number) {
-  console.log(`Sleeping ${ms / 1000} secs...`)
-  return new Promise<void>(resolve => setTimeout(() => {
-    console.log(`Waking up after sleeping ${ms / 1000} secs.`)
-    resolve();
-  }, ms));
+  `)
+  console.error(e);
 }

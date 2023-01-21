@@ -93,10 +93,12 @@ export async function useTradeExactIn(tokenAmountIn?: TokenAmount, tokenOut?: To
         bestTradeSoFar = currentTrade
       }
     }
-    //console.log(`bestTradeSoFar ${JSON.stringify(bestTradeSoFar,null,2)}`)
-    //console.log(`inputAmount ${bestTradeSoFar.inputAmount.toSignificant(8)}`)
-    //console.log(`outputAmount ${bestTradeSoFar.outputAmount.toSignificant(8)}`)
-    //console.log(`executionPrice ${bestTradeSoFar.executionPrice.toSignificant(8)}`)
+    if (bestTradeSoFar) {
+      // console.log(`bestTradeSoFar ${JSON.stringify(bestTradeSoFar,null,2)}`)
+      console.log(`inputAmount ${bestTradeSoFar.inputAmount.toSignificant(8)}`)
+      console.log(`outputAmount ${bestTradeSoFar.outputAmount.toSignificant(8)}`)
+      console.log(`executionPrice ${bestTradeSoFar.executionPrice.toSignificant(8)}`)
+    }
     return bestTradeSoFar
   }
   return null
